@@ -115,7 +115,7 @@
             stroke-width: 1.5px;
             stroke-linejoin: round;
             stroke-linecap: round;
-            vector-effect: non-scaling-stroke; /* Verhindert ungleiche & dicke Rahmen */
+            vector-effect: non-scaling-stroke;
             cursor: pointer;
             transition: fill 0.15s ease;
             -webkit-tap-highlight-color: transparent;
@@ -128,8 +128,7 @@
 
         .state-path.active {
             fill: var(--map-active);
-            stroke: #475569; /* Dezente, dünne Umrandung für das gewählte Land */
-            stroke-width: 1.5px;
+            stroke: var(--map-border); /* Behält die einheitlich weiße Grenzlinie bei */
         }
 
         #loader {
@@ -218,7 +217,7 @@
             }
 
             .map-section {
-                height: 380px; /* Feste Höhe verhindert Höhen-Sprüngen beim Klicken */
+                height: 380px;
             }
 
             #map {
@@ -441,7 +440,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             const loader = document.getElementById('loader');
             
-            // Fester virtueller Koordinatenraum (600x750) verhindert das Flackern bei Viewport-Änderungen
             const width = 600;
             const height = 750;
 
@@ -471,7 +469,6 @@
                         d3.select(this).append('title').text(geoName);
                     })
                     .on("click", function(event, d) {
-                        // Markierung setzen
                         d3.selectAll('.state-path').classed('active', false);
                         d3.select(this).classed('active', true);
 
@@ -485,7 +482,6 @@
                             );
                         }
 
-                        // DOM ohne Layout-Flicker aktualisieren
                         document.getElementById('default-msg').style.display = 'none';
                         document.getElementById('state-title').innerText = matchedStateKey || geoName;
                         
