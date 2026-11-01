@@ -9,14 +9,14 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
 
     <style>
-        /* Minimalistisches und sauberes Styling (ohne Tailwind) */
+        /* Minimalistisches und sauberes Styling */
         :root {
             --bg-color: #f4f4f9;
             --text-main: #333333;
             --text-light: #777777;
-            --map-border: #333333;
-            --map-fill: #e0e0e0;
-            --map-hover: #d0d0d0;
+            --map-border: #ffffff; /* Saubere weiße Trennlinien */
+            --map-fill: #e2e8f0;
+            --map-hover: #cbd5e1;
             --map-active: #FFD700; /* Auffälliges Gelb */
             --panel-bg: #ffffff;
             --border-color: #e5e7eb;
@@ -60,7 +60,7 @@
             margin: 0 auto;
             width: 100%;
             box-sizing: border-box;
-            flex-wrap: wrap; /* Für kleinere Bildschirme */
+            flex-wrap: wrap;
         }
 
         .map-section, .info-section {
@@ -80,11 +80,11 @@
         @media (min-width: 769px) {
             html, body {
                 height: 100vh;
-                overflow: hidden; /* Gesamtes Fenster-Scrollen verhindern */
+                overflow: hidden;
             }
 
             .container {
-                height: calc(100vh - 85px); /* Container auf verbleibende Höhe begrenzen */
+                height: calc(100vh - 85px);
                 flex-wrap: nowrap;
             }
 
@@ -94,7 +94,7 @@
 
             .info-section {
                 height: 100%;
-                overflow-y: auto; /* Nur der rechte Bereich scrollt bei Bedarf */
+                overflow-y: auto;
             }
         }
 
@@ -102,7 +102,7 @@
         #map {
             width: 100%;
             flex: 1;
-            min-height: 300px;
+            min-height: 350px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -112,11 +112,13 @@
         .state-path {
             fill: var(--map-fill);
             stroke: var(--map-border);
-            stroke-width: 1px;
+            stroke-width: 1.5px;
             stroke-linejoin: round;
+            stroke-linecap: round;
+            vector-effect: non-scaling-stroke; /* Verhindert ungleiche & dicke Rahmen */
             cursor: pointer;
-            transition: fill 0.2s ease-in-out, stroke-width 0.2s;
-            -webkit-tap-highlight-color: transparent; /* Verhindert das blaue/graue Aufblitzen beim Tappen */
+            transition: fill 0.15s ease;
+            -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
         }
 
@@ -126,8 +128,8 @@
 
         .state-path.active {
             fill: var(--map-active);
-            stroke-width: 2px;
-            stroke: #000000;
+            stroke: #475569; /* Dezente, dünne Umrandung für das gewählte Land */
+            stroke-width: 1.5px;
         }
 
         #loader {
@@ -137,12 +139,12 @@
 
         /* Info Panel Styles */
         .info-content {
-            display: none; /* Initial versteckt */
-            animation: fadeIn 0.3s ease-in-out;
+            display: none;
         }
 
         .info-content.visible {
             display: block;
+            animation: fadeIn 0.25s ease-in-out;
         }
 
         .default-msg {
@@ -191,7 +193,7 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(4px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
@@ -215,11 +217,15 @@
                 min-width: 100%;
             }
 
-            #map {
-                min-height: 350px;
+            .map-section {
+                height: 380px; /* Feste Höhe verhindert Höhen-Sprüngen beim Klicken */
             }
 
-            /* Tabelle auf Smartphones in untereinander liegende Blöcke/Karten umwandeln */
+            #map {
+                min-height: 100%;
+            }
+
+            /* Tabelle auf Smartphones in Blöcke umwandeln */
             table, tbody, tr, th, td {
                 display: block;
                 width: 100%;
@@ -433,11 +439,11 @@
 
         // 2. D3.js Karten-Logik
         document.addEventListener('DOMContentLoaded', () => {
-            const mapContainer = document.getElementById('map');
             const loader = document.getElementById('loader');
             
-            const width = mapContainer.clientWidth;
-            const height = mapContainer.clientHeight || 500;
+            // Fester virtueller Koordinatenraum (600x750) verhindert das Flackern bei Viewport-Änderungen
+            const width = 600;
+            const height = 750;
 
             const svg = d3.select("#map")
                 .append("svg")
@@ -446,7 +452,6 @@
                 .style("width", "100%")
                 .style("height", "100%");
 
-            // Zuverlässige GeoJSON Quelle aus den Anforderungen
             const geoJsonUrl = 'https://raw.githubusercontent.com/isellsoap/deutschlandGeoJSON/main/2_bundeslaender/3_mittel.geo.json';
 
             d3.json(geoJsonUrl).then(geojson => {
@@ -462,21 +467,15 @@
                     .attr("d", pathGenerator)
                     .attr("class", "state-path")
                     .each(function(d) {
-                        // Title direkt beim Erstellen anfügen, um Touch-Events nicht zu stören
                         let geoName = d.properties.NAME_1 || d.properties.NAME || d.properties.name || d.properties.GEN || "Unbekannt";
                         d3.select(this).append('title').text(geoName);
                     })
                     .on("click", function(event, d) {
-                        // 1. Alle Markierungen zurücksetzen
+                        // Markierung setzen
                         d3.selectAll('.state-path').classed('active', false);
-                        
-                        // 2. Angeklicktes Bundesland gelb hervorheben (OHNE DOM-Reorder .raise(), um Flackern auf Mobilgeräten zu verhindern)
                         d3.select(this).classed('active', true);
 
-                        // 3. Name extrahieren
                         let geoName = d.properties.NAME_1 || d.properties.NAME || d.properties.name || d.properties.GEN;
-                        
-                        // 4. Robuster Abgleich des Geo-Namens mit unserer JavaScript-Datenbank
                         let matchedStateKey = Object.keys(stateData).find(key => key === geoName);
                         
                         if (!matchedStateKey) {
@@ -486,41 +485,29 @@
                             );
                         }
 
-                        // 5. DOM aktualisieren
+                        // DOM ohne Layout-Flicker aktualisieren
                         document.getElementById('default-msg').style.display = 'none';
-                        const infoContent = document.getElementById('info-content');
-                        infoContent.classList.remove('visible'); // Reset Animation
+                        document.getElementById('state-title').innerText = matchedStateKey || geoName;
                         
-                        setTimeout(() => {
-                            document.getElementById('state-title').innerText = matchedStateKey || geoName;
-                            
-                            if (matchedStateKey && stateData[matchedStateKey]) {
-                                document.getElementById('data-gesetz').innerText = stateData[matchedStateKey].gesetz;
-                                document.getElementById('data-anwendungsbereich').innerText = stateData[matchedStateKey].anwendungsbereich;
-                                document.getElementById('data-vor').innerText = stateData[matchedStateKey].voraussetzungen;
-                                document.getElementById('data-fristen').innerText = stateData[matchedStateKey].fristen;
-                                document.getElementById('data-behandlung').innerText = stateData[matchedStateKey].behandlung;
-                            } else {
-                                document.getElementById('data-gesetz').innerText = "Keine Daten hinterlegt.";
-                                document.getElementById('data-vor').innerText = "-";
-                                document.getElementById('data-fristen').innerText = "-";
-                                document.getElementById('data-behandlung').innerText = "-";
-                            }
-                            
-                            infoContent.classList.add('visible');
-                        }, 10);
+                        if (matchedStateKey && stateData[matchedStateKey]) {
+                            document.getElementById('data-gesetz').innerText = stateData[matchedStateKey].gesetz;
+                            document.getElementById('data-anwendungsbereich').innerText = stateData[matchedStateKey].anwendungsbereich;
+                            document.getElementById('data-vor').innerText = stateData[matchedStateKey].voraussetzungen;
+                            document.getElementById('data-fristen').innerText = stateData[matchedStateKey].fristen;
+                            document.getElementById('data-behandlung').innerText = stateData[matchedStateKey].behandlung;
+                        } else {
+                            document.getElementById('data-gesetz').innerText = "Keine Daten hinterlegt.";
+                            document.getElementById('data-vor').innerText = "-";
+                            document.getElementById('data-fristen').innerText = "-";
+                            document.getElementById('data-behandlung').innerText = "-";
+                        }
+                        
+                        document.getElementById('info-content').classList.add('visible');
                     });
 
             }).catch(error => {
                 loader.innerText = "Fehler beim Laden der Karte. Bitte prüfen Sie Ihre Internetverbindung.";
                 console.error("GeoJSON Load Error:", error);
-            });
-            
-            // Verhindert das Verzerren der Karte beim Ändern der Fenstergröße
-            window.addEventListener('resize', () => {
-                const newWidth = mapContainer.clientWidth;
-                const newHeight = mapContainer.clientHeight || 500;
-                svg.attr("viewBox", `0 0 ${newWidth} ${newHeight}`);
             });
         });
     </script>
