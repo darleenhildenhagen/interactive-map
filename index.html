@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Psychotherapie in Krisensituationen: PsychKG</title>
+    
+    <!-- Nur D3.js wird geladen, KEIN Tailwind CSS -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <style>
+        /* Minimalistisches und sauberes Styling (ohne Tailwind) */
+        :root {
+            --bg-color: #f4f4f9;
+            --text-main: #333333;
+            --text-light: #777777;
+            --map-border: #333333;
+            --map-fill: #e0e0e0;
+            --map-hover: #d0d0d0;
+            --map-active: #FFD700; /* Auffälliges Gelb */
+            --panel-bg: #ffffff;
+            --border-color: #e5e7eb;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--panel-bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background-color: var(--panel-bg);
+            padding: 24px 40px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 300;
+        }
+
+        h1 strong {
+            font-weight: 600;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            padding: 30px;
+            gap: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+            flex-wrap: wrap; /* Für kleinere Bildschirme */
+        }
+
+        .map-section, .info-section {
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* D3 Map Styles */
+        #map {
+            width: 100%;
+            flex: 1;
+            min-height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .state-path {
+            fill: var(--map-fill);
+            stroke: var(--map-border);
+            stroke-width: 1px;
+            stroke-linejoin: round;
+            cursor: pointer;
+            transition: fill 0.2s ease-in-out, stroke-width 0.2s;
+        }
+
+        .state-path:hover {
+            fill: var(--map-hover);
+        }
+
+        .state-path.active {
+            fill: var(--map-active);
+            stroke-width: 1.5px;
+            /* Bringt das selektierte Element visuell nach vorne */
+            paint-order: stroke;
+        }
+
+        #loader {
+            color: var(--text-light);
+            font-size: 1rem;
+        }
+
+        /* Info Panel Styles */
+        .info-content {
+            display: none; /* Initial versteckt */
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .info-content.visible {
+            display: block;
+        }
+
+        .default-msg {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: var(--text-light);
+            font-size: 1.1rem;
+        }
+
+        h2#state-title {
+            margin-top: 0;
+            font-size: 1.5rem;
+            color: var(--text-main);
+            border-bottom: 2px solid var(--map-active);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 14px 10px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        th {
+            width: 35%;
+            color: var(--text-light);
+            font-weight: 600;
+            background-color: #fdfdfd;
+        }
+
+        td {
+            line-height: 1.5;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Psychotherapie in Krisensituationen | <strong>PsychKG</strong></h1>
+    </header>
+
+    <div class="container">
+        <!-- Linke Seite: Karte -->
+        <div class="map-section">
+            <div id="map">
+                <div id="loader">Lade Deutschlandkarte...</div>
+            </div>
+        </div>
+
+        <!-- Rechte Seite: Info Panel -->
+        <div class="info-section">
+            <div id="default-msg" class="default-msg">
+                Bitte wählen Sie ein Bundesland auf der Karte aus,<br>um die länderspezifischen Regelungen zu sehen.
+            </div>
+
+            <div id="info-content" class="info-content">
+                <h2 id="state-title">Bundesland Name</h2>
+                <table>
+                    <tbody>
+                        <tr>
+                            <th>Zuständiges Gesetz</th>
+                            <td id="data-gesetz"></td>
+                        </tr>
+                         <tr>
+                            <th>Anwendungsbereich</th>
+                            <td id="data-anwendungsbereich"></td>
+                        </tr>
+                        <tr>
+                            <th>Voraussetzungen Unterbringung</th>
+                            <td id="data-vor"></td>
+                        </tr>
+                        <tr>
+                            <th>Voraussetzungen Behandlung</th>
+                            <td id="data-behandlung"></td>
+                        </tr>
+                        <tr>
+                            <th>Formelles Verfahren & Fristen</th>
+                            <td id="data-fristen"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Datenbasis für die 16 Bundesländer
+        const stateData = {
+            "Baden-Württemberg": {
+                gesetz: "PsychKHG BW (Psychisch-Kranken-Hilfe-Gesetz)",
+                voraussetzungen: "§13, Einsichtsunfähigkeit und/oder Steuerungsunfähigkeit, Selbst- und Fremdgefährdung, Einwilligungsunfähigkeit, ultimata ratio",
+                fristen: "Anordnung durch zuständiges Gericht, Berücksichtigung möglicher Patientenverfügung, außgenommen bei Selbst- und Fremdgefährdung (Gefahr im Verzug)",
+                behandlung: "§20, Anspruch auf notwendige Behandlung nach Unterbringung, Erreichbarkeit des Behandlungsziels bei geringstem Eingriff in persönliche Freiheit, Behandlung Bedarf Einwilligung außgenommen bei mangelnder Einsicht der Behnadlungsbedürftigkeit, Ziel: Herstellung der freien Selbstbestimmung ",
+                anwendungsbereich: "Menschen, die aufgrund einer psychischen Störung krank oder behindert sind"
+            },
+            "Bayern": {
+                gesetz: "BayPsychKHG (Bayerisches Psychisch-Kranken-Hilfe-Gesetz)",
+                voraussetzungen: "Abwendung einer gegenwärtigen erheblichen Gefahr von Gewalttätigkeiten gegen Personen oder der Gefahr der Selbsttötung oder Selbstverletzung unerlässlich sind",
+                fristen: "[Platzhalter: Unverzügliche gerichtliche Entscheidung, max. bis Ablauf des Folgetages...]",
+                behandlung: "Einsichtsunfähigkeit und/oder Steuerungsunfähigkeit, " +
+                "Einwilligungsunfähigkeit, "+
+                "Erreichbarkeit des Behandlungsziels, "+
+                "Überzeugungsversuche, "+
+                "Positive Kosten-Nutzen-Abwägung (+)"+
+                "Richtervorbehalt (+)",
+                anwendungsbereich: "Menschen mit psychischem Hilfebedarf"
+            },
+            "Berlin": {
+                gesetz: "PsychKG Bln (Gesetz über Hilfen und Schutzmaßnahmen...)",
+                voraussetzungen: "Eigen- oder Fremdgefährdung",
+                fristen: "[Platzhalter: Gerichtliche Anhörung und Beschlussfrist...]",
+                behandlung: "",
+                anwendungsbereich: "Menschen mit psychischem Hilfebedarf, einschließlich Abhängigkeit von Suchtmitteln" 
+            },
+            "Brandenburg": {
+                gesetz: "BbgPsychKG",
+                voraussetzungen: "Fixierungen sowie einer Fixierung gleichkommende Ruhigstellungen durch Medikamente, die absehbar länger als eine halbe Stunde dauern werden, sind nur zulässig, soweit und solange die Gefahr von Gewalttätigkeiten gegen Personen, der Selbsttötung oder der Selbstverletzung in erhöhtem Maß besteht, und die besondere Sicherungsmaßnahme zur Abwehr der Gefahr unerlässlich ist",
+                fristen: "[Platzhalter: Brandenburg Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Personen, welche unter psychischen Krankheiten und/ oder seelischen Behinderungen leiden. Insebesondere Personen, die an einer Psychose oder einem mit Verlust der Selbstkontrolle einhergehendem Substanzmissbrauch leiden"
+            },
+            "Bremen": {
+                gesetz: "PsychKG Bremen",
+                voraussetzungen: "Eine Fixierung ist nur zur Abwendung einer gegenwärtigen erheblichen Gefahr für das Leben oder die Gesundheit der untergebrachten Person oder anderer Personen zulässig, wenn eine mildere Maßnahme nicht in Betracht kommt oder aussichtslos ist und diese Gefahr anders nicht abgewendet werden kann.",
+                fristen: "[Platzhalter: Bremen Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Personen, bei denen Anzeichen einer psychischen Erkrankung bestehen, die psychisch erkrankt sind oder bei denen die Folgen einer psychischen Erkrankung fortbestehen"
+            },
+            "Hamburg": {
+                gesetz: "HmbPsychKG",
+                voraussetzungen: "Eine untergebrachte Person darf zeitweise fixiert werden, wenn und solange die gegenwärtige Gefahr besteht, dass sie gegen Personen gewalttätig wird oder sich selbst tötet oder sich verletzt, und diese Gefahr nicht anders abgewendet werden kann",
+                fristen: "[Platzhalter: Hamburg Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Personen, die an einer psychischen Krankheit oder deren Folgen leiden, die von einer psychischen Krankheit bedroht sind oder bei denen Anzeichen für eine psychische Krankheit bestehen"
+            },
+            "Hessen": {
+                gesetz: "HessPsychKHG",
+                voraussetzungen: "Bei einer gegenwärtigen erheblichen Gefahr für das Leben oder die Gesundheit der untergebrachten Person oder für das Leben, die Gesundheit oder andere bedeutende Rechtsgüter Anderer können besondere Sicherungsmaßnahmen angeordnet werden, wenn und solange die Gefahr nicht durch weniger einschneidende Maßnahmen abgewendet werden kann",
+                fristen: "[Platzhalter: Hessen Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Personen, die infolge einer psychischen Störung funktionseingeschränkt, krank oder behindert sind oder bei denen Anzeichen für eine solche Funktionseinschränkung, Krankheit oder Behinderung bestehen. Dazu zählt auch eine mit dem Verlust der Selbstkontrolle ein hergehende Abhängigkeit von Suchtstoffen"
+            },
+            "Mecklenburg-Vorpommern": {
+                gesetz: "PsychKG M-V",
+                voraussetzungen: "Besondere Sicherungsmaßnahmen sind nur zulässig, wenn dies zur Abwehr von gegenwärtigen Gefahren für Gesundheit, Leben oder andere bedeutende Rechtsgüter des Patienten oder Dritter erforderlich ist oder absehbar ist, dass der Patient die Einrichtung ohne Erlaubnis verlassen wird, und wenn diesen Gefahren nicht anders begegnet werden kann",
+                fristen: "[Platzhalter: M-V Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Menschen mit psychischen Krankheiten. Im Sinne des Gesetzes sind das Personen, bei denen eine geistige oder seelische Krankheit oder Störung von erheblichem Ausmaß vorliegt oder die an einer mit dem Verlust der Selbstkontrolle einhergehenden Abhängigkeit von Suchtstoffen leiden oder bei denen Anzeichen einer solchen Krankheit oder Störung vorliegen"
+            },
+            "Niedersachsen": {
+                gesetz: "NPsychKG",
+                voraussetzungen: "Eine besondere Sicherungsmaßnahme ist nur zulässig, wenn sie zur Abwehr einer gegenwärtigen erheblichen Gefahr für das Leben oder die Gesundheit der untergebrachten Person oder eines Dritten erforderlich ist und die Gefahr nicht durch weniger eingreifende Maßnahmen abgewendet werden kann. Eine Fixierung einer einwilligungsfähigen untergebrachten Person durch die (ergänzende) Gabe von Medikamenten ist ohne deren Einwilligung nur zulässig, wenn die Fixierung der Abwehr einer gegenwärtigen erheblichen Gefahr für das Leben oder die Gesundheit eines Dritten erforderlich ist",
+                fristen: "[Platzhalter: Niedersachsen Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Personen, die eine psychische Krankheit oder eine seelische Behinderung haben oder hatten oder bei denen Anzeichen für eine solche Krankheit oder Behinderung bestehen, wobei psychische Krankheiten im Sinne dieses Gesetzes auch psychische Störungen von erheblichem Ausmaß mit Krankheitswert sind"
+            },
+            "Nordrhein-Westfalen": {
+                gesetz: "PsychKG NRW",
+                voraussetzungen: "Besondere Sicherungsmaßnahmen zur Abwehr einer gegenwärtigen erheblichen Selbstgefährdung oder einer gegenwärtigen erheblichen Gefährdung besonderer Rechtsgüter Dritter dürfen nur angeordnet werden, soweit und solange die Gefahr nicht durch mildere Maßnahmen abgewendet werden kann",
+                fristen: "[Platzhalter: Antrag ans Amtsgericht unverzüglich, spätestens jedoch bis Ablauf des Folgetages...]",
+                behandlung: "",
+                anwendungsbereich:"Menschen, bei denen Anzeichen einer psychischen Krankheit bestehen, die psychisch erkrankt sind oder bei denen die Folgen einer psychischen Krankheit fortbestehen. Psychische Krankheiten im Sinne dieses Gesetzes sind behandlungsbedürftige Psychosen sowie andere behandlungsbedürftige psychische Störungen und Abhängigkeitserkrankungen von vergleichbarer Schwere"
+            },
+            "Rheinland-Pfalz": {
+                gesetz: "PsychKG RLP",
+                voraussetzungen: "Besondere Sicherungsmaßnahmen sind nur zulässig, wenn die gegenwärtige Gefahr besteht, dass die untergebrachte Person sich selbst tötet, ihre eigene Gesundheit oder bedeutende Rechtsgüter Dritter erheblich schädigt oder sich der Unterbringung ohne Erlaubnis entziehen will. Besondere Sicherungsmaßnahmen dürfen angeordnet werden, wenn und solange dieser Gefahr nicht durch weniger eingreifende Maßnahmen begegnet werden kann",
+                fristen: "[Platzhalter: RLP Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"psychisch erkrankte Personen, das sind im Sinne dieses Gesetzes Personen, bei denen eine psychische Krankheit, Störung oder Behinderung vorliegt. Hierzu zählt auch eine mit dem Verlust der Selbstkontrolle einhergehende Abhängigkeit von Suchtstoffen"
+            },
+            "Saarland": {
+                gesetz: "UBG Saarland (Unterbringungsgesetz)",
+                voraussetzungen: "Besondere Sicherungsmaßnahmen sind nur zulässig, wenn von einer untergebrachten Person eine gegenwärtige erhebliche Gefahr für deren Leben oder Gesundheit oder das Leben oder die Gesundheit Dritter ausgehen, soweit diese Gefahr nicht anders abgewendet werden kann. Darüber hinaus sind die ständige Beobachtung der untergebrachten Person und die Unterbringung in einem besonders gesicherten Raum ohne gefährdende Gegenstände auch zulässig, wenn in erhöhtem Maße die Gefahr besteht, dass sich die untergebrachte Person selbst oder mit der Hilfe einer dritten Person der Obhut der Einrichtung entzieht oder wenn eine gegenwärtige Gefahr für bedeutende Rechtsgüter Dritter nicht anders abgewendet werden kann",
+                fristen: "[Platzhalter: Saarland Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Personen, die infolge einer psychischen Störung oder psychischen Erkrankung funktionseingeschränkt, krank oder behindert sind. Hierzu zählt auch eine mit dem Verlust der Selbstkontrolle einhergehende Abhängigkeit von Suchtstoffen"
+            },
+            "Sachsen": {
+                gesetz: "SächsPsychKG",
+                voraussetzungen: "Zulässig sind nur Sicherungsmaßnahmen, die für den Zweck der Unterbringung und zur Vermeidung oder Beseitigung einer erheblichen Störung der Sicherheit oder Ordnung des Krankenhauses bzw. der anerkannten Einrichtung unerlässlich sind. Außerdem sind Sicherungsmaßnahmen zulässig, wenn die gegenwärtige Gefahr besteht, dass die untergebrachte Person sich selbst tötet, ihre eigene Gesundheit oder bedeutende Rechtsgüter Dritter erheblich schädigt oder sich der Unterbringung ohne Erlaubnis entziehen will, sofern dieser Gefahr nicht durch weniger eingreifende Maßnahmen begegnet werden kann",
+                fristen: "[Platzhalter: Sachsen Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Menschen mit psychischen Erkrankungen und von psychischer Krankheit bedrohte Menschen (§ 1). Menschen mit psychischen Erkrankungen im Sinne dieses Gesetzes sind Menschen, die infolge einer psychischen Störung funktionseingeschränkt, krank oder behindert sind, einschließlich Menschen mit Abhängigkeitserkrankung, gerontopsychiatrischer Erkrankung oder seelischer Behinderung "
+            },
+            "Sachsen-Anhalt": {
+                gesetz: "PsychKG LSA",
+                voraussetzungen: "Die Wegnahme oder Vorenthaltung von Gegenständen, die Beschränkung oder Versagung des Aufenthalts im Freien, das Festhalten, die Absonderung und die Beobachtung sind nur zulässig, wenn und solange die gegenwärtige erhebliche Gefahr besteht, dass die untergebrachte Person sich selbst tötet oder einen schwerwiegenden gesundheitlichen Schaden zufügt oder gewalttätig wird und dadurch andere Personen oder Sachen erheblichen Wertes schädigt oder wenn sie das Krankenhaus ohne Erlaubnis verlässt und wenn der Gefahr nicht anderweitig begegnet werden kann (§ 26). Die Fixierung und die Einschränkung der Bewegungsfreiheit durch mechanische Mittel ist nur ausnahmsweise und nur dann zulässig, wenn und solange die gegenwärtige erhebliche Gefahr besteht, dass die untergebrachte Person sich selbst tötet oder sich einen schwerwiegenden gesundheitlichen Schaden zufügt oder gewalttätig wird und dadurch andere Personen oder Sachen erheblichen Wertes schädigt, und wenn mildere Mittel zur Abwendung der Gefahr nicht in Betracht kommen ",
+                fristen: "[Platzhalter: Sachsen-Anhalt Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Personen mit einer psychischen Erkrankung, d. h. im Sinne dieses Gesetzes: Personen, die an einer geistigen oder seelischen Krankheit, an einer geistigen oder seelischen Störung von erheblichem Ausmaß oder an einer behandlungsbedürftigen Suchtkrankheit leiden oder bei denen Anzeichen oder Folgen einer solchen Krankheit, Störung oder Suchtkrankheit vorliegen, unabhängig von ihrem Alter"
+            },
+            "Schleswig-Holstein": {
+                gesetz: "PsychKG SH",
+                voraussetzungen: "Sicherungs- und Zwangsmaßnahmen dürfen angeordnet werden, wenn es zur Sicherung des Zwecks der Unterbringung, zur Aufrechterhaltung der Sicherheit oder zur Abwendung einer schwerwiegenden Störung der Ordnung des Krankenhauses unerlässlich ist (§ 27). Besondere Sicherungsmaßnahmen dürfen nur angeordnet werden, wenn und solange die Gefahr besteht, dass der Patient gegen Personen gewalttätig wird oder sich selbst tötet oder erheblich verletzt, und nur, wenn und soweit mildere Mittel nicht in Betracht kommen (§ 28). Eine Maßnahme hat zu unterbleiben, wenn die Gefahr auch anders abgewendet werden kann oder ein durch die Maßnahme zu erwartender Schaden erkennbar außer Verhältnis zu dem angestrebten Erfolg steht ",
+                fristen: "[Platzhalter: Schleswig-Holstein Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"Menschen mit psychischen Störungen, die nach medizinischer Einschätzung behandlungsbedürftig sind, unabhängig von ihrer Ursache "
+            },
+            "Thüringen": {
+                gesetz: "ThürPsychKG",
+                voraussetzungen: "Besondere Sicherungsmaßnahmen können bei einer gegenwärtigen erheblichen Gefahr für das Leben oder die Gesundheit des Patienten oder für das Leben, die Gesundheit oder andere bedeutende Rechtsgüter Dritter angeordnet werden. Es darf kein milderes Mittel zum Erreichen des Ziels zur Verfügung stehen, es muss stets das jeweils mildeste eingesetzt werden, es muss verhältnismäßig sein, der Nutzen muss die Beeinträchtigung überwiegen und die Maßnahme darf nicht über das Erforderliche hinausgehen",
+                fristen: "[Platzhalter: Thüringen Fristen...]",
+                behandlung: "",
+                anwendungsbereich:"psychisch kranke Menschen; das sind im Sinne des Gesetzes Personen, bei denen eine Krankheit, Behinderung oder Störung von erheblichem Ausmaß mit Krankheitswert einschließlich einer physischen oder psychischen Abhängigkeit von Rauschmitteln, Suchtmitteln oder Medikamenten vorliegt"
+            }
+        };
+
+        // 2. D3.js Karten-Logik
+        document.addEventListener('DOMContentLoaded', () => {
+            const mapContainer = document.getElementById('map');
+            const loader = document.getElementById('loader');
+            
+            const width = mapContainer.clientWidth;
+            const height = mapContainer.clientHeight || 500;
+
+            const svg = d3.select("#map")
+                .append("svg")
+                .attr("viewBox", `0 0 ${width} ${height}`)
+                .attr("preserveAspectRatio", "xMidYMid meet")
+                .style("width", "100%")
+                .style("height", "100%");
+
+            // Zuverlässige GeoJSON Quelle aus den Anforderungen
+            const geoJsonUrl = 'https://raw.githubusercontent.com/isellsoap/deutschlandGeoJSON/main/2_bundeslaender/3_mittel.geo.json';
+
+            d3.json(geoJsonUrl).then(geojson => {
+                loader.style.display = 'none';
+
+                // fitSize berechnet automatisch den Maßstab und die Zentrierung, 
+                // sodass Deutschland perfekt in die Box (width x height) passt!
+                const projection = d3.geoMercator().fitSize([width, height], geojson);
+                const pathGenerator = d3.geoPath().projection(projection);
+
+                svg.selectAll("path")
+                    .data(geojson.features)
+                    .enter()
+                    .append("path")
+                    .attr("d", pathGenerator)
+                    .attr("class", "state-path")
+                    .on("mouseover", function(event, d) {
+                        // Dynamisches Auslesen des Namens aus dem GeoJSON (verschiedene Key-Möglichkeiten abfangen)
+                        let geoName = d.properties.NAME_1 || d.properties.NAME || d.properties.name || d.properties.GEN || "Unbekannt";
+                        if (!this.querySelector('title')) {
+                            d3.select(this).append('title').text(geoName);
+                        }
+                    })
+                    .on("click", function(event, d) {
+                        // 1. Alle Markierungen zurücksetzen
+                        d3.selectAll('.state-path').classed('active', false);
+                        
+                        // 2. Angeklicktes Bundesland gelb hervorheben (Klasse .active siehe CSS)
+                        d3.select(this).classed('active', true);
+                        d3.select(this).raise(); // Bringt SVG-Element nach vorne (für saubere Border)
+
+                        // 3. Name extrahieren
+                        let geoName = d.properties.NAME_1 || d.properties.NAME || d.properties.name || d.properties.GEN;
+                        
+                        // 4. Robuster Abgleich des Geo-Namens mit unserer JavaScript-Datenbank
+                        // Zuerst exakt prüfen, damit "Sachsen-Anhalt" nicht fälschlicherweise als "Sachsen" erkannt wird.
+                        let matchedStateKey = Object.keys(stateData).find(key => key === geoName);
+                        
+                        // Nur wenn kein exakter Treffer gefunden wurde, suchen wir nach Teilwörtern
+                        if (!matchedStateKey) {
+                            matchedStateKey = Object.keys(stateData).find(key => 
+                                (geoName.includes(key) || key.includes(geoName)) && 
+                                !(geoName.includes("Sachsen-Anhalt") && key === "Sachsen") // Ausnahme-Regel
+                            );
+                        }
+
+                        // 5. DOM aktualisieren
+                        document.getElementById('default-msg').style.display = 'none';
+                        const infoContent = document.getElementById('info-content');
+                        infoContent.classList.remove('visible'); // Reset Animation
+                        
+                        // Kurzer Timeout für erneutes Triggern der CSS Animation
+                        setTimeout(() => {
+                            document.getElementById('state-title').innerText = matchedStateKey || geoName;
+                            
+                            if (matchedStateKey && stateData[matchedStateKey]) {
+                                document.getElementById('data-gesetz').innerText = stateData[matchedStateKey].gesetz;
+                                document.getElementById('data-anwendungsbereich').innerText = stateData[matchedStateKey].anwendungsbereich;
+                                document.getElementById('data-vor').innerText = stateData[matchedStateKey].voraussetzungen;
+                                document.getElementById('data-fristen').innerText = stateData[matchedStateKey].fristen;
+                                document.getElementById('data-behandlung').innerText = stateData[matchedStateKey].behandlung;
+                            } else {
+                                // Fallback, falls ein Bundesland in der JS-Datei fehlt
+                                document.getElementById('data-gesetz').innerText = "Keine Daten hinterlegt.";
+                                document.getElementById('data-vor').innerText = "-";
+                                document.getElementById('data-fristen').innerText = "-";
+                                document.getElementById('data-behandlung').innerText = "-";
+                            }
+                            
+                            infoContent.classList.add('visible');
+                        }, 10);
+                    });
+
+            }).catch(error => {
+                loader.innerText = "Fehler beim Laden der Karte. Bitte prüfen Sie Ihre Internetverbindung.";
+                console.error("GeoJSON Load Error:", error);
+            });
+            
+            // Verhindert das Verzerren der Karte beim Ändern der Fenstergröße
+            window.addEventListener('resize', () => {
+                const newWidth = mapContainer.clientWidth;
+                const newHeight = mapContainer.clientHeight || 500;
+                svg.attr("viewBox", `0 0 ${newWidth} ${newHeight}`);
+                // Hinweis: d3.geoMercator().fitSize muss theoretisch neu aufgerufen werden, 
+                // aber viewBox skaliert SVG nativ bereits sehr gut.
+            });
+        });
+    </script>
+</body>
+</html>
