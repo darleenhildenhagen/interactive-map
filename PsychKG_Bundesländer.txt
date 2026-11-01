@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Psychotherapie in Krisensituationen: PsychKG</title>
+    
+    <!-- Nur D3.js wird geladen, KEIN Tailwind CSS -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <style>
+        /* Minimalistisches und sauberes Styling (ohne Tailwind) */
+        :root {
+            --bg-color: #f4f4f9;
+            --text-main: #333333;
+            --text-light: #777777;
+            --map-border: #333333;
+            --map-fill: #e0e0e0;
+            --map-hover: #d0d0d0;
+            --map-active: #FFD700; /* Auffälliges Gelb */
+            --panel-bg: #ffffff;
+            --border-color: #e5e7eb;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background-color: var(--panel-bg);
+            padding: 24px 40px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 300;
+        }
+
+        h1 strong {
+            font-weight: 600;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            padding: 30px;
+            gap: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+            flex-wrap: wrap; /* Für kleinere Bildschirme */
+        }
+
+        .map-section, .info-section {
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* D3 Map Styles */
+        #map {
+            width: 100%;
+            flex: 1;
+            min-height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .state-path {
+            fill: var(--map-fill);
+            stroke: var(--map-border);
+            stroke-width: 1px;
+            stroke-linejoin: round;
+            cursor: pointer;
+            transition: fill 0.2s ease-in-out, stroke-width 0.2s;
+        }
+
+        .state-path:hover {
+            fill: var(--map-hover);
+        }
+
+        .state-path.active {
+            fill: var(--map-active);
+            stroke-width: 1.5px;
+            /* Bringt das selektierte Element visuell nach vorne */
+            paint-order: stroke;
+        }
+
+        #loader {
+            color: var(--text-light);
+            font-size: 1rem;
+        }
+
+        /* Info Panel Styles */
+        .info-content {
+            display: none; /* Initial versteckt */
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .info-content.visible {
+            display: block;
+        }
+
+        .default-msg {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: var(--text-light);
+            font-size: 1.1rem;
+        }
+
+        h2#state-title {
+            margin-top: 0;
+            font-size: 1.5rem;
+            color: var(--text-main);
+            border-bottom: 2px solid var(--map-active);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 14px 10px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        th {
+            width: 35%;
+            color: var(--text-light);
+            font-weight: 600;
+            background-color: #fdfdfd;
+        }
+
+        td {
+            line-height: 1.5;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Psychotherapie in Krisensituationen | <strong>PsychKG</strong></h1>
+    </header>
+
+    <div class="container">
+        <!-- Linke Seite: Karte -->
+        <div class="map-section">
+            <div id="map">
+                <div id="loader">Lade Deutschlandkarte...</div>
+            </div>
+        </div>
+
+        <!-- Rechte Seite: Info Panel -->
+        <div class="info-section">
+            <div id="default-msg" class="default-msg">
+                Bitte wählen Sie ein Bundesland auf der Karte aus,<br>um die länderspezifischen Regelungen zu sehen.
+            </div>
+
+            <div id="info-content" class="info-content">
+                <h2 id="state-title">Bundesland Name</h2>
+                <table>
+                    <tbody>
+                        <tr>
+                            <th>Zuständiges Gesetz</th>
+                            <td id="data-gesetz"></td>
+                        </tr>
+                        <tr>
+                            <th>Voraussetzungen (Unterbringung)</th>
+                            <td id="data-vor"></td>
+                        </tr>
+                        <tr>
+                            <th>Gerichtliche Entscheidung & Fristen</th>
+                            <td id="data-fristen"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Datenbasis für die 16 Bundesländer
+        const stateData = {
+            "Baden-Württemberg": {
+                gesetz: "Hallo PsychKHG BW (Psychisch-Kranken-Hilfe-Gesetz)",
+                voraussetzungen: "[Platzhalter: Erhebliche und gegenwärtige Gefahr für sich oder andere aufgrund einer psychischen Störung...]",
+                fristen: "[Platzhalter: Entscheidung spätestens bis zum Ablauf des auf das Festhalten folgenden Tages...]"
+            },
+            "Bayern": {
+                gesetz: "BayPsychKHG (Bayerisches Psychisch-Kranken-Hilfe-Gesetz)",
+                voraussetzungen: "[Platzhalter: Erhebliche Eigen- oder Fremdgefährdung...]",
+                fristen: "[Platzhalter: Unverzügliche gerichtliche Entscheidung, max. bis Ablauf des Folgetages...]"
+            },
+            "Berlin": {
+                gesetz: "PsychKG Bln (Gesetz über Hilfen und Schutzmaßnahmen...)",
+                voraussetzungen: "[Platzhalter: Dringende Gefahr für die öffentliche Sicherheit oder das eigene Leben...]",
+                fristen: "[Platzhalter: Gerichtliche Anhörung und Beschlussfrist...]"
+            },
+            "Brandenburg": {
+                gesetz: "BbgPsychKG",
+                voraussetzungen: "[Platzhalter: Brandenburg Voraussetzungen...]",
+                fristen: "[Platzhalter: Brandenburg Fristen...]"
+            },
+            "Bremen": {
+                gesetz: "PsychKG Bremen",
+                voraussetzungen: "[Platzhalter: Bremen Voraussetzungen...]",
+                fristen: "[Platzhalter: Bremen Fristen...]"
+            },
+            "Hamburg": {
+                gesetz: "HmbPsychKG",
+                voraussetzungen: "[Platzhalter: Hamburg Voraussetzungen...]",
+                fristen: "[Platzhalter: Hamburg Fristen...]"
+            },
+            "Hessen": {
+                gesetz: "HessPsychKHG",
+                voraussetzungen: "[Platzhalter: Hessen Voraussetzungen...]",
+                fristen: "[Platzhalter: Hessen Fristen...]"
+            },
+            "Mecklenburg-Vorpommern": {
+                gesetz: "PsychKG M-V",
+                voraussetzungen: "[Platzhalter: M-V Voraussetzungen...]",
+                fristen: "[Platzhalter: M-V Fristen...]"
+            },
+            "Niedersachsen": {
+                gesetz: "NPsychKG",
+                voraussetzungen: "[Platzhalter: Niedersachsen Voraussetzungen...]",
+                fristen: "[Platzhalter: Niedersachsen Fristen...]"
+            },
+            "Nordrhein-Westfalen": {
+                gesetz: "PsychKG NRW",
+                voraussetzungen: "[Platzhalter: Gegenwärtige erhebliche Selbst- oder Fremdgefährdung, die anders nicht abwendbar ist...]",
+                fristen: "[Platzhalter: Antrag ans Amtsgericht unverzüglich, spätestens jedoch bis Ablauf des Folgetages...]"
+            },
+            "Rheinland-Pfalz": {
+                gesetz: "PsychKG RLP",
+                voraussetzungen: "[Platzhalter: RLP Voraussetzungen...]",
+                fristen: "[Platzhalter: RLP Fristen...]"
+            },
+            "Saarland": {
+                gesetz: "UBG Saarland (Unterbringungsgesetz)",
+                voraussetzungen: "[Platzhalter: Saarland Voraussetzungen...]",
+                fristen: "[Platzhalter: Saarland Fristen...]"
+            },
+            "Sachsen": {
+                gesetz: "SächsPsychKG",
+                voraussetzungen: "[Platzhalter: Sachsen Voraussetzungen...]",
+                fristen: "[Platzhalter: Sachsen Fristen...]"
+            },
+            "Sachsen-Anhalt": {
+                gesetz: "PsychKG LSA",
+                voraussetzungen: "[Platzhalter: Sachsen-Anhalt Voraussetzungen...]",
+                fristen: "[Platzhalter: Sachsen-Anhalt Fristen...]"
+            },
+            "Schleswig-Holstein": {
+                gesetz: "PsychKG SH",
+                voraussetzungen: "[Platzhalter: Schleswig-Holstein Voraussetzungen...]",
+                fristen: "[Platzhalter: Schleswig-Holstein Fristen...]"
+            },
+            "Thüringen": {
+                gesetz: "ThürPsychKG",
+                voraussetzungen: "[Platzhalter: Thüringen Voraussetzungen...]",
+                fristen: "[Platzhalter: Thüringen Fristen...]"
+            }
+        };
+
+        // 2. D3.js Karten-Logik
+        document.addEventListener('DOMContentLoaded', () => {
+            const mapContainer = document.getElementById('map');
+            const loader = document.getElementById('loader');
+            
+            const width = mapContainer.clientWidth;
+            const height = mapContainer.clientHeight || 500;
+
+            const svg = d3.select("#map")
+                .append("svg")
+                .attr("viewBox", `0 0 ${width} ${height}`)
+                .attr("preserveAspectRatio", "xMidYMid meet")
+                .style("width", "100%")
+                .style("height", "100%");
+
+            // Zuverlässige GeoJSON Quelle aus den Anforderungen
+            const geoJsonUrl = 'https://raw.githubusercontent.com/isellsoap/deutschlandGeoJSON/main/2_bundeslaender/3_mittel.geo.json';
+
+            d3.json(geoJsonUrl).then(geojson => {
+                loader.style.display = 'none';
+
+                // fitSize berechnet automatisch den Maßstab und die Zentrierung, 
+                // sodass Deutschland perfekt in die Box (width x height) passt!
+                const projection = d3.geoMercator().fitSize([width, height], geojson);
+                const pathGenerator = d3.geoPath().projection(projection);
+
+                svg.selectAll("path")
+                    .data(geojson.features)
+                    .enter()
+                    .append("path")
+                    .attr("d", pathGenerator)
+                    .attr("class", "state-path")
+                    .on("mouseover", function(event, d) {
+                        // Dynamisches Auslesen des Namens aus dem GeoJSON (verschiedene Key-Möglichkeiten abfangen)
+                        let geoName = d.properties.NAME_1 || d.properties.NAME || d.properties.name || d.properties.GEN || "Unbekannt";
+                        if (!this.querySelector('title')) {
+                            d3.select(this).append('title').text(geoName);
+                        }
+                    })
+                    .on("click", function(event, d) {
+                        // 1. Alle Markierungen zurücksetzen
+                        d3.selectAll('.state-path').classed('active', false);
+                        
+                        // 2. Angeklicktes Bundesland gelb hervorheben (Klasse .active siehe CSS)
+                        d3.select(this).classed('active', true);
+                        d3.select(this).raise(); // Bringt SVG-Element nach vorne (für saubere Border)
+
+                        // 3. Name extrahieren
+                        let geoName = d.properties.NAME_1 || d.properties.NAME || d.properties.name || d.properties.GEN;
+                        
+                        // 4. Robuster Abgleich des Geo-Namens mit unserer JavaScript-Datenbank
+                        // Zuerst exakt prüfen, damit "Sachsen-Anhalt" nicht fälschlicherweise als "Sachsen" erkannt wird.
+                        let matchedStateKey = Object.keys(stateData).find(key => key === geoName);
+                        
+                        // Nur wenn kein exakter Treffer gefunden wurde, suchen wir nach Teilwörtern
+                        if (!matchedStateKey) {
+                            matchedStateKey = Object.keys(stateData).find(key => 
+                                (geoName.includes(key) || key.includes(geoName)) && 
+                                !(geoName.includes("Sachsen-Anhalt") && key === "Sachsen") // Ausnahme-Regel
+                            );
+                        }
+
+                        // 5. DOM aktualisieren
+                        document.getElementById('default-msg').style.display = 'none';
+                        const infoContent = document.getElementById('info-content');
+                        infoContent.classList.remove('visible'); // Reset Animation
+                        
+                        // Kurzer Timeout für erneutes Triggern der CSS Animation
+                        setTimeout(() => {
+                            document.getElementById('state-title').innerText = matchedStateKey || geoName;
+                            
+                            if (matchedStateKey && stateData[matchedStateKey]) {
+                                document.getElementById('data-gesetz').innerText = stateData[matchedStateKey].gesetz;
+                                document.getElementById('data-vor').innerText = stateData[matchedStateKey].voraussetzungen;
+                                document.getElementById('data-fristen').innerText = stateData[matchedStateKey].fristen;
+                            } else {
+                                // Fallback, falls ein Bundesland in der JS-Datei fehlt
+                                document.getElementById('data-gesetz').innerText = "Keine Daten hinterlegt.";
+                                document.getElementById('data-vor').innerText = "-";
+                                document.getElementById('data-fristen').innerText = "-";
+                            }
+                            
+                            infoContent.classList.add('visible');
+                        }, 10);
+                    });
+
+            }).catch(error => {
+                loader.innerText = "Fehler beim Laden der Karte. Bitte prüfen Sie Ihre Internetverbindung.";
+                console.error("GeoJSON Load Error:", error);
+            });
+            
+            // Verhindert das Verzerren der Karte beim Ändern der Fenstergröße
+            window.addEventListener('resize', () => {
+                const newWidth = mapContainer.clientWidth;
+                const newHeight = mapContainer.clientHeight || 500;
+                svg.attr("viewBox", `0 0 ${newWidth} ${newHeight}`);
+                // Hinweis: d3.geoMercator().fitSize muss theoretisch neu aufgerufen werden, 
+                // aber viewBox skaliert SVG nativ bereits sehr gut.
+            });
+        });
+    </script>
+</body>
+</html>
