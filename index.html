@@ -106,6 +106,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            touch-action: manipulation;
         }
 
         .state-path {
@@ -115,6 +116,8 @@
             stroke-linejoin: round;
             cursor: pointer;
             transition: fill 0.2s ease-in-out, stroke-width 0.2s;
+            -webkit-tap-highlight-color: transparent; /* Verhindert das blaue/graue Aufblitzen beim Tappen */
+            touch-action: manipulation;
         }
 
         .state-path:hover {
@@ -123,9 +126,8 @@
 
         .state-path.active {
             fill: var(--map-active);
-            stroke-width: 1.5px;
-            /* Bringt das selektierte Element visuell nach vorne */
-            paint-order: stroke;
+            stroke-width: 2px;
+            stroke: #000000;
         }
 
         #loader {
@@ -450,8 +452,6 @@
             d3.json(geoJsonUrl).then(geojson => {
                 loader.style.display = 'none';
 
-                // fitSize berechnet automatisch den Maßstab und die Zentrierung, 
-                // sodass Deutschland perfekt in die Box (width x height) passt!
                 const projection = d3.geoMercator().fitSize([width, height], geojson);
                 const pathGenerator = d3.geoPath().projection(projection);
 
@@ -461,33 +461,28 @@
                     .append("path")
                     .attr("d", pathGenerator)
                     .attr("class", "state-path")
-                    .on("mouseover", function(event, d) {
-                        // Dynamisches Auslesen des Namens aus dem GeoJSON (verschiedene Key-Möglichkeiten abfangen)
+                    .each(function(d) {
+                        // Title direkt beim Erstellen anfügen, um Touch-Events nicht zu stören
                         let geoName = d.properties.NAME_1 || d.properties.NAME || d.properties.name || d.properties.GEN || "Unbekannt";
-                        if (!this.querySelector('title')) {
-                            d3.select(this).append('title').text(geoName);
-                        }
+                        d3.select(this).append('title').text(geoName);
                     })
                     .on("click", function(event, d) {
                         // 1. Alle Markierungen zurücksetzen
                         d3.selectAll('.state-path').classed('active', false);
                         
-                        // 2. Angeklicktes Bundesland gelb hervorheben (Klasse .active siehe CSS)
+                        // 2. Angeklicktes Bundesland gelb hervorheben (OHNE DOM-Reorder .raise(), um Flackern auf Mobilgeräten zu verhindern)
                         d3.select(this).classed('active', true);
-                        d3.select(this).raise(); // Bringt SVG-Element nach vorne (für saubere Border)
 
                         // 3. Name extrahieren
                         let geoName = d.properties.NAME_1 || d.properties.NAME || d.properties.name || d.properties.GEN;
                         
                         // 4. Robuster Abgleich des Geo-Namens mit unserer JavaScript-Datenbank
-                        // Zuerst exakt prüfen, damit "Sachsen-Anhalt" nicht fälschlicherweise als "Sachsen" erkannt wird.
                         let matchedStateKey = Object.keys(stateData).find(key => key === geoName);
                         
-                        // Nur wenn kein exakter Treffer gefunden wurde, suchen wir nach Teilwörtern
                         if (!matchedStateKey) {
                             matchedStateKey = Object.keys(stateData).find(key => 
                                 (geoName.includes(key) || key.includes(geoName)) && 
-                                !(geoName.includes("Sachsen-Anhalt") && key === "Sachsen") // Ausnahme-Regel
+                                !(geoName.includes("Sachsen-Anhalt") && key === "Sachsen")
                             );
                         }
 
@@ -496,7 +491,6 @@
                         const infoContent = document.getElementById('info-content');
                         infoContent.classList.remove('visible'); // Reset Animation
                         
-                        // Kurzer Timeout für erneutes Triggern der CSS Animation
                         setTimeout(() => {
                             document.getElementById('state-title').innerText = matchedStateKey || geoName;
                             
@@ -507,7 +501,6 @@
                                 document.getElementById('data-fristen').innerText = stateData[matchedStateKey].fristen;
                                 document.getElementById('data-behandlung').innerText = stateData[matchedStateKey].behandlung;
                             } else {
-                                // Fallback, falls ein Bundesland in der JS-Datei fehlt
                                 document.getElementById('data-gesetz').innerText = "Keine Daten hinterlegt.";
                                 document.getElementById('data-vor').innerText = "-";
                                 document.getElementById('data-fristen').innerText = "-";
